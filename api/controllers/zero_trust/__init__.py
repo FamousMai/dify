@@ -8,4 +8,4 @@ zero_trust_bp = Blueprint('zero_trust', __name__, url_prefix='/api/zero-trust')
 zero_trust_api = Api(zero_trust_bp)
 
 # 导入并注册路由
-from . import auth  # noqa: E402 
+from . import auth

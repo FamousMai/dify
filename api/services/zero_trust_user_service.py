@@ -9,14 +9,14 @@
 import logging
 import re
 from datetime import UTC, datetime
-from typing import Optional, List, Dict, Any
+from typing import Any, Optional
 
 from extensions.ext_database import db
 from models.zero_trust import (
-    ZeroTrustUser,
-    ZeroTrustUserStatus,
-    ZeroTrustUserRole,
     ZeroTrustAuditLog,
+    ZeroTrustUser,
+    ZeroTrustUserRole,
+    ZeroTrustUserStatus,
 )
 from services.zero_trust_auth_service import ZeroTrustAuthService
 
@@ -405,7 +405,7 @@ class ZeroTrustUserService:
         status: Optional[ZeroTrustUserStatus] = None,
         role: Optional[ZeroTrustUserRole] = None,
         search: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """获取用户列表
         
         Args:
@@ -483,7 +483,7 @@ class ZeroTrustUserService:
             }
 
     @staticmethod
-    def create_demo_users() -> List[ZeroTrustUser]:
+    def create_demo_users() -> list[ZeroTrustUser]:
         """创建演示用户（用于测试）"""
         demo_users_data = [
             {

@@ -10,13 +10,14 @@
 import logging
 from typing import Optional
 
-from flask import request, current_app
+from flask import current_app, request
 from flask_restful import Resource, reqparse
-from werkzeug.exceptions import BadRequest, Unauthorized, NotFound
+from werkzeug.exceptions import BadRequest, Unauthorized
 
-from . import zero_trust_api
 from services.zero_trust_auth_service import ZeroTrustAuthService
 from services.zero_trust_user_service import ZeroTrustUserService
+
+from . import zero_trust_api
 
 logger = logging.getLogger(__name__)
 

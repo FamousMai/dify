@@ -8,25 +8,22 @@
 
 import hashlib
 import hmac
-import jwt
-import secrets
 import logging
+import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
+import jwt
 from flask import request
-from sqlalchemy.orm import Session
 
 from extensions.ext_database import db
 from models.zero_trust import (
-    ZeroTrustUser,
-    ZeroTrustToken,
     ZeroTrustAuditLog,
-    ZeroTrustUserStatus,
+    ZeroTrustToken,
     ZeroTrustTokenStatus,
+    ZeroTrustUser,
+    ZeroTrustUserStatus,
 )
-from configs import dify_config
-
 
 # 零信任系统配置
 ZERO_TRUST_JWT_SECRET = "zero-trust-jwt-secret-key-for-development"  # 实际应用中应该从环境变量获取
@@ -47,7 +44,7 @@ class ZeroTrustAuthService:
         result: str,
         user_id: Optional[str] = None,
         resource: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        details: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None
     ) -> None:
         """记录审计日志"""
@@ -114,7 +111,7 @@ class ZeroTrustAuthService:
         return jwt.encode(payload, ZERO_TRUST_JWT_SECRET, algorithm='HS256')
 
     @staticmethod
-    def _verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
+    def _verify_jwt_token(token: str) -> Optional[dict[str, Any]]:
         """验证JWT Token"""
         try:
             payload = jwt.decode(
@@ -408,7 +405,7 @@ class ZeroTrustAuthService:
             return 0
 
     @staticmethod
-    def get_user_token_info(token: str) -> Optional[Dict[str, Any]]:
+    def get_user_token_info(token: str) -> Optional[dict[str, Any]]:
         """获取Token关联的用户信息（模拟外部API）
         
         Args:

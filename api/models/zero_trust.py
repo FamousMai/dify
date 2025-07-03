@@ -4,15 +4,16 @@
 """
 
 import enum
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Optional
 
-from sqlalchemy import func, Index, JSON, String, Boolean, DateTime, Text
+from sqlalchemy import JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from models.base import Base
-from .engine import db
 from models.types import StringUUID
+
+from .engine import db
 
 
 class ZeroTrustUserStatus(enum.StrEnum):
