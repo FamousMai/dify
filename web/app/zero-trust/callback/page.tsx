@@ -75,16 +75,16 @@ const ZeroTrustCallback = () => {
         localStorage.setItem('console_token', token) // 临时使用零信任token作为console token
 
         setStatus('success')
-        setMessage(`身份验证成功！正在跳转到Dify工作区...`)
+        setMessage(`身份验证成功！将在10秒后跳转到Dify工作区...`)
 
-        // 延迟跳转，让用户看到成功消息
+        // 延迟跳转，让用户看到成功消息和流程
         setTimeout(() => {
           Toast.notify({
             type: 'success',
             message: `欢迎使用Dify，${zeroTrustUser.name}！`,
           })
           router.push(redirectUrl)
-        }, 2000)
+        }, 10000)
 
       } catch (error) {
         console.error('Zero trust auth error:', error)
@@ -179,7 +179,11 @@ const ZeroTrustCallback = () => {
           {status === 'success' && (
             <div className="text-sm text-green-600">
               <div className="mb-2">✓ 身份验证成功</div>
-              <div>正在跳转到Dify工作区...</div>
+              <div className="mb-2">✓ 用户会话已创建</div>
+              <div className="text-blue-600">将在10秒后自动跳转到Dify工作区...</div>
+              <div className="mt-3 text-xs text-gray-500">
+                您可以查看完整的零信任认证流程
+              </div>
             </div>
           )}
 

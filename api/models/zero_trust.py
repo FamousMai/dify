@@ -264,18 +264,24 @@ class ZeroTrustToken(Base):
         """检查Token是否有效"""
         if self.status != ZeroTrustTokenStatus.ACTIVE:
             return False
-        if self.expires_at < datetime.now(UTC):
+        # 统一使用naive datetime进行比较
+        now = datetime.now()
+        expires_at = self.expires_at.replace(tzinfo=None) if self.expires_at.tzinfo else self.expires_at
+        if expires_at < now:
             return False
         return True
 
     def is_expired(self) -> bool:
         """检查Token是否过期"""
-        return self.expires_at < datetime.now(UTC)
+        # 统一使用naive datetime进行比较
+        now = datetime.now()
+        expires_at = self.expires_at.replace(tzinfo=None) if self.expires_at.tzinfo else self.expires_at
+        return expires_at < now
 
     def revoke(self, revoked_by: Optional[str] = None):
         """撤销Token"""
         self.status = ZeroTrustTokenStatus.REVOKED
-        self.revoked_at = datetime.now(UTC)
+        self.revoked_at = datetime.now()
         self.revoked_by = revoked_by
 
 

@@ -177,7 +177,7 @@ class ZeroTrustAuthService:
             
             # 如果失败次数过多，锁定账户
             if user.failed_login_attempts >= ZERO_TRUST_MAX_LOGIN_ATTEMPTS:
-                user.locked_until = datetime.now(UTC) + timedelta(minutes=ZERO_TRUST_LOCKOUT_DURATION_MINUTES)
+                user.locked_until = datetime.now() + timedelta(minutes=ZERO_TRUST_LOCKOUT_DURATION_MINUTES)
                 ZeroTrustAuthService._log_action(
                     action="ACCOUNT_LOCKED",
                     result="SUCCESS",
@@ -199,7 +199,7 @@ class ZeroTrustAuthService:
         
         # 登录成功，重置失败次数
         user.failed_login_attempts = 0
-        user.last_login_at = datetime.now(UTC)
+        user.last_login_at = datetime.now()
         user.last_login_ip = request.remote_addr if request else None
         user.locked_until = None
         
@@ -233,7 +233,7 @@ class ZeroTrustAuthService:
             token_record = ZeroTrustToken(
                 user_id=user.id,
                 token_hash=token_hash,
-                expires_at=datetime.now(UTC) + timedelta(minutes=ZERO_TRUST_TOKEN_EXPIRE_MINUTES),
+                expires_at=datetime.now() + timedelta(minutes=ZERO_TRUST_TOKEN_EXPIRE_MINUTES),
                 client_ip=request.remote_addr if request else None,
                 user_agent=request.headers.get('User-Agent') if request else None
             )
@@ -377,7 +377,7 @@ class ZeroTrustAuthService:
         """
         try:
             expired_tokens = db.session.query(ZeroTrustToken).filter(
-                ZeroTrustToken.expires_at < datetime.now(UTC),
+                ZeroTrustToken.expires_at < datetime.now(),
                 ZeroTrustToken.status == ZeroTrustTokenStatus.ACTIVE
             ).all()
             

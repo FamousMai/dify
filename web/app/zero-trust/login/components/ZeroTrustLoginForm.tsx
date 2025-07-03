@@ -31,8 +31,8 @@ const ZeroTrustLoginForm = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [formData, setFormData] = useState<LoginFormData>({
-    username: '',
-    password: '',
+    username: 'admin',
+    password: 'Admin123!',
   })
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)

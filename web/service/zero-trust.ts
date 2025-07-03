@@ -77,12 +77,20 @@ export const zeroTrustLogin = (data: ZeroTrustLoginRequest) => {
   return postPublic<ZeroTrustLoginResponse>('/zero-trust/auth/login', { body: data })
 }
 
-export const getUserTokenInfo = (token: string) => {
-  return getPublic<GetUserTokenInfoResponse>('/zero-trust/auth/getUserTokenInfo', {
+export const getUserTokenInfo = async (token: string): Promise<GetUserTokenInfoResponse> => {
+  const response = await fetch('http://localhost:5001/api/zero-trust/auth/getUserTokenInfo', {
+    method: 'GET',
     headers: {
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
   })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+
+  return response.json()
 }
 
 export const verifyZeroTrustToken = (data: ZeroTrustVerifyRequest) => {
