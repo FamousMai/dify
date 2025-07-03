@@ -12,6 +12,7 @@ def init_app(app: DifyApp):
     from controllers.inner_api import bp as inner_api_bp
     from controllers.service_api import bp as service_api_bp
     from controllers.web import bp as web_bp
+    from controllers.zero_trust import zero_trust_bp
 
     CORS(
         service_api_bp,
@@ -46,3 +47,14 @@ def init_app(app: DifyApp):
     app.register_blueprint(files_bp)
 
     app.register_blueprint(inner_api_bp)
+
+    # 注册零信任系统蓝图
+    CORS(
+        zero_trust_bp,
+        resources={r"/*": {"origins": "*"}},  # 开发环境允许所有来源
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "PUT", "POST", "DELETE", "OPTIONS", "PATCH"],
+        expose_headers=["X-Version", "X-Env"],
+    )
+    app.register_blueprint(zero_trust_bp)

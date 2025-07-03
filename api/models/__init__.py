@@ -89,6 +89,14 @@ from .workflow import (
     WorkflowRun,
     WorkflowType,
 )
+from .zero_trust import (
+    ZeroTrustAuditLog,
+    ZeroTrustToken,
+    ZeroTrustTokenStatus,
+    ZeroTrustUser,
+    ZeroTrustUserRole,
+    ZeroTrustUserStatus,
+)
 
 __all__ = [
     "APIBasedExtension",
@@ -175,5 +183,11 @@ __all__ = [
     "WorkflowRunTriggeredFrom",
     "WorkflowToolProvider",
     "WorkflowType",
+    "ZeroTrustAuditLog",
+    "ZeroTrustToken",
+    "ZeroTrustTokenStatus",
+    "ZeroTrustUser",
+    "ZeroTrustUserRole",
+    "ZeroTrustUserStatus",
     "db",
 ]
