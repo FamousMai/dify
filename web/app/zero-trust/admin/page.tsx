@@ -1,369 +1,232 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Loading from '@/app/components/base/loading'
 import Toast from '@/app/components/base/toast'
-import { getZeroTrustUserList, initZeroTrustDemo } from '@/service/zero-trust'
-import type { ZeroTrustUser, ZeroTrustUserListResponse, ZeroTrustDemoInitResponse } from '@/service/zero-trust'
+import Loading from '@/app/components/base/loading'
+import { initZeroTrustDemo } from '@/service/zero-trust'
 
+interface DemoUser {
+  username: string
+  email: string
+  name: string
+  role: string
+}
 
+interface DemoInitResponse {
+  success: boolean
+  message: string
+  users: DemoUser[]
+}
 
-const ZeroTrustAdminPage = () => {
+const ZeroTrustAdmin = () => {
   const router = useRouter()
-  const [users, setUsers] = useState<ZeroTrustUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [isInitializing, setIsInitializing] = useState(false)
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [demoUsers, setDemoUsers] = useState<DemoUser[]>([])
+  const [initialized, setInitialized] = useState(false)
 
-  // 检查管理员权限
-  useEffect(() => {
-    const checkAuth = () => {
-      const userSession = localStorage.getItem('dify_user_session')
-      if (!userSession) {
+  const handleInitDemo = async () => {
+    setLoading(true)
+    try {
+      const response = await initZeroTrustDemo()
+      
+      if (response.success) {
+        setDemoUsers(response.users)
+        setInitialized(true)
+        
+        Toast.notify({
+          type: 'success',
+          message: response.message,
+        })
+      } else {
         Toast.notify({
           type: 'error',
-          message: '请先登录',
+          message: '初始化失败',
         })
-        router.push('/zero-trust/login?redirect_url=/zero-trust/admin')
-        return
-      }
-
-      try {
-        const user = JSON.parse(userSession)
-        setCurrentUser(user)
-        
-        if (user.zero_trust_user?.role !== 'admin') {
-          Toast.notify({
-            type: 'error',
-            message: '权限不足，只有管理员可以访问此页面',
-          })
-          router.push('/apps')
-          return
-        }
-      } catch (error) {
-        console.error('解析用户信息失败:', error)
-        router.push('/zero-trust/login')
-        return
-      }
-    }
-
-    checkAuth()
-  }, [router])
-
-  // 加载用户列表
-  const loadUsers = async () => {
-    if (!currentUser) return
-    
-    try {
-      const token = localStorage.getItem('zero_trust_token')
-      if (!token) {
-        throw new Error('未找到认证Token')
-      }
-
-      const data = await getZeroTrustUserList(token)
-      if (data.success) {
-        setUsers(data.users)
-      } else {
-        throw new Error('获取用户列表失败')
       }
     } catch (error) {
-      console.error('加载用户列表错误:', error)
+      console.error('初始化演示数据失败:', error)
       Toast.notify({
         type: 'error',
-        message: error instanceof Error ? error.message : '加载用户列表失败',
+        message: '初始化失败，请重试',
       })
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => {
-    if (currentUser) {
-      loadUsers()
-    }
-  }, [currentUser])
-
-  // 初始化演示数据
-  const handleInitDemo = async () => {
-    setIsInitializing(true)
-    
-    try {
-      const data = await initZeroTrustDemo()
-      
-      if (data.success) {
-        Toast.notify({
-          type: 'success',
-          message: data.message,
-        })
-        
-        // 重新加载用户列表
-        await loadUsers()
-      } else {
-        throw new Error(data.message || '初始化演示数据失败')
-      }
-    } catch (error) {
-      console.error('初始化演示数据错误:', error)
-      Toast.notify({
-        type: 'error',
-        message: error instanceof Error ? error.message : '初始化演示数据失败',
-      })
-    } finally {
-      setIsInitializing(false)
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('zh-CN')
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusMap = {
-      'active': { text: '活跃', color: 'bg-green-100 text-green-800' },
-      'inactive': { text: '未激活', color: 'bg-gray-100 text-gray-800' },
-      'locked': { text: '锁定', color: 'bg-red-100 text-red-800' },
-      'suspended': { text: '暂停', color: 'bg-yellow-100 text-yellow-800' },
-    }
-    
-    const statusInfo = statusMap[status as keyof typeof statusMap] || { text: status, color: 'bg-gray-100 text-gray-800' }
-    
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
-        {statusInfo.text}
-      </span>
-    )
-  }
-
-  const getRoleBadge = (role: string) => {
-    const roleMap = {
-      'admin': { text: '管理员', color: 'bg-purple-100 text-purple-800' },
-      'manager': { text: '经理', color: 'bg-blue-100 text-blue-800' },
-      'user': { text: '用户', color: 'bg-gray-100 text-gray-800' },
-      'guest': { text: '访客', color: 'bg-yellow-100 text-yellow-800' },
-    }
-    
-    const roleInfo = roleMap[role as keyof typeof roleMap] || { text: role, color: 'bg-gray-100 text-gray-800' }
-    
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleInfo.color}`}>
-        {roleInfo.text}
-      </span>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loading type="area" />
-      </div>
-    )
+  const goToLogin = () => {
+    router.push('/zero-trust/login')
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* 页面头部 */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">零信任系统管理</h1>
-              <p className="mt-2 text-gray-600">
-                管理零信任用户和系统配置
-                {currentUser && (
-                  <span className="ml-2 text-sm">
-                    当前用户: {currentUser.name} ({currentUser.zero_trust_user?.role})
-                  </span>
-                )}
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          {/* 头部 */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              零信任系统管理
+            </h1>
+            <p className="text-gray-600">
+              初始化演示数据并测试零信任登录功能
+            </p>
+          </div>
+
+          {/* 导航卡片 */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-2">
+                  快速开始
+                </h2>
+                <p className="text-gray-600">
+                  使用预配置的演示账户快速体验零信任登录
+                </p>
+              </div>
+              <button
+                onClick={goToLogin}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                前往登录
+              </button>
             </div>
-            <div className="flex space-x-4">
+          </div>
+
+          {/* 演示数据初始化 */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              演示数据初始化
+            </h2>
+            
+            <div className="mb-6">
+              <p className="text-gray-600 mb-4">
+                点击下方按钮初始化演示用户数据。这将创建预配置的用户账户用于测试零信任登录功能。
+              </p>
+              
               <button
                 onClick={handleInitDemo}
-                disabled={isInitializing}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                disabled={loading}
+                className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+                  loading
+                    ? 'bg-gray-400 cursor-not-allowed text-white'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
               >
-                {isInitializing ? (
-                  <>
+                {loading ? (
+                  <div className="flex items-center space-x-2">
                     <Loading type="area" />
-                    <span className="ml-2">初始化中...</span>
-                  </>
+                    <span>初始化中...</span>
+                  </div>
                 ) : (
                   '初始化演示数据'
                 )}
               </button>
-              <button
-                onClick={() => router.push('/apps')}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                返回Dify
-              </button>
             </div>
-          </div>
-        </div>
 
-        {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">总用户数</dt>
-                  <dd className="text-lg font-medium text-gray-900">{users.length}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">活跃用户</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {users.filter(user => user.status === 'active').length}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">管理员</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {users.filter(user => user.role === 'admin').length}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">锁定用户</dt>
-                  <dd className="text-lg font-medium text-gray-900">
-                    {users.filter(user => user.status === 'locked').length}
-                  </dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 用户列表 */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-medium text-gray-900">用户列表</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    用户信息
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    部门
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    角色
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    状态
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    最后登录
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    失败次数
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                            <span className="text-sm font-medium text-gray-700">
-                              {user.name.charAt(0)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
-                          <div className="text-xs text-gray-400">@{user.username}</div>
-                        </div>
+            {/* 演示用户列表 */}
+            {initialized && demoUsers.length > 0 && (
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  已创建的演示用户
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {demoUsers.map((user) => (
+                    <div key={user.username} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-gray-900">{user.name}</h4>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          user.role === 'admin' 
+                            ? 'bg-red-100 text-red-800' 
+                            : user.role === 'manager'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}>
+                          {user.role}
+                        </span>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.department || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getRoleBadge(user.role)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(user.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.last_login_at ? formatDate(user.last_login_at) : '从未登录'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.failed_login_attempts}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <p className="text-sm text-gray-600 mb-1">
+                        <span className="font-medium">用户名:</span> {user.username}
+                      </p>
+                      <p className="text-sm text-gray-600 mb-3">
+                        <span className="font-medium">邮箱:</span> {user.email}
+                      </p>
+                      <div className="text-xs text-gray-500 bg-white p-2 rounded border">
+                        <span className="font-medium">密码:</span> {
+                          user.role === 'admin' ? 'Admin123!' :
+                          user.role === 'manager' ? 'Manager123!' : 'User123!'
+                        }
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-start space-x-3">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium text-blue-900 mb-1">
+                        使用说明
+                      </h4>
+                      <ul className="text-sm text-blue-800 space-y-1">
+                        <li>• 使用以上任意账户登录零信任系统</li>
+                        <li>• 登录成功后将自动跳转到Dify工作区</li>
+                        <li>• 管理员账户具有完整的系统访问权限</li>
+                        <li>• 演示数据可以重复初始化（会覆盖现有数据）</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          
-          {users.length === 0 && (
-            <div className="text-center py-12">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2 2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">暂无用户数据</h3>
-              <p className="mt-1 text-sm text-gray-500">点击"初始化演示数据"按钮创建演示用户</p>
+
+          {/* 系统架构说明 */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mt-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              零信任系统架构
+            </h2>
+            <div className="space-y-3 text-gray-600">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-medium">1</span>
+                </div>
+                <p>用户在零信任UI服务中进行身份验证</p>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-medium">2</span>
+                </div>
+                <p>零信任系统验证成功后跳转到Dify前端</p>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-medium">3</span>
+                </div>
+                <p>Dify前端调用零信任API获取用户Token信息</p>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-medium">4</span>
+                </div>
+                <p>系统自动创建或关联Dify账户并生成登录令牌</p>
+              </div>
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 text-sm font-medium">5</span>
+                </div>
+                <p>用户成功登录Dify工作区</p>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-export default ZeroTrustAdminPage 
+export default ZeroTrustAdmin 

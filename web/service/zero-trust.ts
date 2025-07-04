@@ -34,6 +34,10 @@ export interface ZeroTrustLoginResponse {
 export interface GetUserTokenInfoResponse {
   success: boolean
   user: ZeroTrustUser
+  dify_token: {
+    access_token: string
+    refresh_token: string
+  }
 }
 
 // Token验证请求接口
@@ -48,17 +52,7 @@ export interface ZeroTrustVerifyResponse {
   message?: string
 }
 
-// 用户列表响应接口
-export interface ZeroTrustUserListResponse {
-  success: boolean
-  users: ZeroTrustUser[]
-  pagination: {
-    page: number
-    per_page: number
-    total: number
-    pages: number
-  }
-}
+
 
 // 演示数据初始化响应接口
 export interface ZeroTrustDemoInitResponse {
@@ -105,26 +99,7 @@ export const logoutZeroTrust = (token: string) => {
   })
 }
 
-// 零信任用户管理API
-export const getZeroTrustUserProfile = (token: string) => {
-  return getPublic<{ success: boolean; user: ZeroTrustUser }>('/zero-trust/user/profile', {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-  })
-}
 
-export const getZeroTrustUserList = (token: string, page = 1, per_page = 20) => {
-  return getPublic<ZeroTrustUserListResponse>('/zero-trust/user/list', {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-    params: {
-      page,
-      per_page,
-    },
-  })
-}
 
 // 零信任系统初始化API
 export const initZeroTrustDemo = () => {

@@ -16,6 +16,19 @@ from werkzeug.exceptions import BadRequest, Unauthorized
 
 from services.zero_trust_auth_service import ZeroTrustAuthService
 from services.zero_trust_user_service import ZeroTrustUserService
+from libs.helper import extract_remote_ip
+from extensions.ext_database import db
+
+from models.account import Account, AccountStatus
+from services.account_service import AccountService, TenantService
+from services.feature_service import FeatureService
+from constants.languages import languages
+from events.tenant_event import tenant_was_created
+from datetime import UTC, datetime
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+import uuid
 
 from . import zero_trust_api
 
@@ -46,6 +59,64 @@ def require_zero_trust_auth():
         raise Unauthorized("Token无效或已过期")
     
     return user, token
+
+
+def _get_or_create_dify_account(zero_trust_user):
+    """根据零信任用户信息获取或创建dify账户"""
+    # 首先尝试通过邮箱查找现有账户
+    with Session(db.engine) as session:
+        account = session.execute(select(Account).filter_by(email=zero_trust_user.email)).scalar_one_or_none()
+    
+    if account:
+        # 账户已存在，更新必要信息
+        if account.status == AccountStatus.PENDING.value:
+            account.status = AccountStatus.ACTIVE.value
+            account.initialized_at = datetime.now(UTC).replace(tzinfo=None)
+        
+        # 更新账户名称以匹配零信任用户
+        if account.name != zero_trust_user.name:
+            account.name = zero_trust_user.name
+        
+        db.session.commit()
+        
+        # 确保用户有workspace
+        tenants = TenantService.get_join_tenants(account)
+        if not tenants:
+            if FeatureService.get_system_features().is_allow_create_workspace:
+                new_tenant = TenantService.create_tenant(f"{account.name}'s Workspace")
+                TenantService.create_tenant_member(new_tenant, account, role="owner")
+                account.current_tenant = new_tenant
+                tenant_was_created.send(new_tenant)
+            else:
+                raise BadRequest("无法创建工作区，请联系系统管理员")
+    else:
+        # 创建新账户
+        if not FeatureService.get_system_features().is_allow_register:
+            raise BadRequest("系统不允许注册新用户")
+        
+        # 创建dify账户
+        account = Account()
+        account.id = str(uuid.uuid4())
+        account.email = zero_trust_user.email
+        account.name = zero_trust_user.name
+        account.status = AccountStatus.ACTIVE.value
+        account.initialized_at = datetime.now(UTC).replace(tzinfo=None)
+        account.created_at = datetime.now(UTC).replace(tzinfo=None)
+        account.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        
+        # 设置界面语言
+        account.interface_language = languages[0]  # 默认使用第一种语言
+        
+        db.session.add(account)
+        db.session.commit()
+        
+        # 创建workspace
+        new_tenant = TenantService.create_tenant(f"{account.name}'s Workspace")
+        TenantService.create_tenant_member(new_tenant, account, role="owner")
+        account.current_tenant = new_tenant
+        tenant_was_created.send(new_tenant)
+    
+    return account
 
 
 class ZeroTrustLoginResource(Resource):
@@ -89,7 +160,7 @@ class ZeroTrustLoginResource(Resource):
             token = ZeroTrustAuthService.generate_token(user)
             
             # 构造返回数据
-            redirect_url = request.args.get('redirect_url', current_app.config.get('DIFY_WEB_URL', '/'))
+            redirect_url = request.args.get('redirect_url', '/apps')
             
             response_data = {
                 "success": True,
@@ -116,10 +187,10 @@ class ZeroTrustLoginResource(Resource):
 
 
 class ZeroTrustTokenInfoResource(Resource):
-    """获取Token用户信息（模拟外部API）"""
+    """获取Token用户信息并实现dify登录集成"""
     
     def get(self):
-        """获取Token关联的用户信息
+        """获取Token关联的用户信息并创建dify登录会话
         
         Headers:
         Authorization: Bearer <token>
@@ -127,7 +198,11 @@ class ZeroTrustTokenInfoResource(Resource):
         Returns:
         {
             "success": true,
-            "user": {...}
+            "user": {...},
+            "dify_token": {
+                "access_token": "dify_access_token",
+                "refresh_token": "dify_refresh_token"
+            }
         }
         """
         try:
@@ -135,14 +210,46 @@ class ZeroTrustTokenInfoResource(Resource):
             if not token:
                 raise Unauthorized("缺少Authorization头")
             
-            # 获取用户信息
-            user_info = ZeroTrustAuthService.get_user_token_info(token)
-            if not user_info:
+            # 验证零信任token并获取用户信息
+            zero_trust_user = ZeroTrustAuthService.verify_token(token)
+            if not zero_trust_user:
                 raise Unauthorized("Token无效或已过期")
+            
+            # 获取或创建对应的dify账户
+            dify_account = _get_or_create_dify_account(zero_trust_user)
+            
+            # 生成dify登录token
+            dify_token_pair = AccountService.login(
+                account=dify_account, 
+                ip_address=extract_remote_ip(request)
+            )
+            
+            # 记录审计日志
+            ZeroTrustAuthService._log_action(
+                action="DIFY_LOGIN_SUCCESS",
+                result="SUCCESS",
+                user_id=zero_trust_user.id,
+                resource="getUserTokenInfo",
+                details={
+                    "dify_account_id": dify_account.id,
+                    "dify_account_email": dify_account.email
+                }
+            )
             
             return {
                 "success": True,
-                "user": user_info
+                "user": {
+                    "id": zero_trust_user.id,
+                    "username": zero_trust_user.username,
+                    "email": zero_trust_user.email,
+                    "name": zero_trust_user.name,
+                    "department": zero_trust_user.department,
+                    "role": zero_trust_user.role,
+                    "status": zero_trust_user.status,
+                    "last_login_at": zero_trust_user.last_login_at.isoformat() if zero_trust_user.last_login_at else None,
+                    "created_at": zero_trust_user.created_at.isoformat()
+                },
+                "dify_token": dify_token_pair.model_dump()
             }
             
         except Exception as e:
@@ -250,139 +357,38 @@ class ZeroTrustLogoutResource(Resource):
             raise BadRequest("登出失败")
 
 
-class ZeroTrustUserProfileResource(Resource):
-    """用户个人信息"""
-    
-    def get(self):
-        """获取当前用户信息
-        
-        Headers:
-        Authorization: Bearer <token>
-        
-        Returns:
-        {
-            "success": true,
-            "user": {...}
-        }
-        """
-        try:
-            user, _ = require_zero_trust_auth()
-            
-            return {
-                "success": True,
-                "user": {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "name": user.name,
-                    "department": user.department,
-                    "role": user.role,
-                    "status": user.status,
-                    "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
-                    "created_at": user.created_at.isoformat()
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"获取用户信息失败: {str(e)}")
-            if isinstance(e, Unauthorized):
-                raise
-            raise BadRequest("获取用户信息失败")
-
-
-class ZeroTrustUserListResource(Resource):
-    """用户列表（管理员功能）"""
-    
-    def get(self):
-        """获取用户列表
-        
-        Query Params:
-        - page: 页码 (默认1)
-        - per_page: 每页数量 (默认20)
-        - status: 筛选状态
-        - role: 筛选角色
-        - search: 搜索关键词
-        
-        Headers:
-        Authorization: Bearer <token>
-        
-        Returns:
-        {
-            "success": true,
-            "users": [...],
-            "pagination": {...}
-        }
-        """
-        try:
-            user, _ = require_zero_trust_auth()
-            
-            # 检查权限（只有管理员可以查看用户列表）
-            if user.role != 'admin':
-                raise Unauthorized("权限不足")
-            
-            # 解析查询参数
-            page = request.args.get('page', 1, type=int)
-            per_page = min(request.args.get('per_page', 20, type=int), 100)  # 限制最大每页数量
-            status = request.args.get('status')
-            role = request.args.get('role')
-            search = request.args.get('search')
-            
-            # 获取用户列表
-            result = ZeroTrustUserService.get_user_list(
-                page=page,
-                per_page=per_page,
-                status=status,
-                role=role,
-                search=search
-            )
-            
-            return {
-                "success": True,
-                **result
-            }
-            
-        except Exception as e:
-            logger.error(f"获取用户列表失败: {str(e)}")
-            if isinstance(e, Unauthorized):
-                raise
-            raise BadRequest("获取用户列表失败")
-
-
 class ZeroTrustInitDemoResource(Resource):
-    """初始化演示数据"""
+    """演示数据初始化"""
     
     def post(self):
-        """创建演示用户
+        """初始化演示数据
         
         Returns:
         {
             "success": true,
-            "message": "演示数据创建成功",
+            "message": "演示数据初始化成功",
             "users": [...]
         }
         """
         try:
-            # 创建演示用户
-            demo_users = ZeroTrustUserService.create_demo_users()
-            
-            users_info = []
-            for user in demo_users:
-                users_info.append({
-                    "username": user.username,
-                    "email": user.email,
-                    "name": user.name,
-                    "role": user.role
-                })
+            users = ZeroTrustUserService.create_demo_users()
             
             return {
                 "success": True,
-                "message": f"成功创建{len(demo_users)}个演示用户",
-                "users": users_info
+                "message": "演示数据初始化成功",
+                "users": [
+                    {
+                        "username": user.username,
+                        "email": user.email,
+                        "name": user.name,
+                        "role": user.role
+                    } for user in users
+                ]
             }
             
         except Exception as e:
-            logger.error(f"创建演示数据失败: {str(e)}")
-            raise BadRequest("创建演示数据失败")
+            logger.error(f"初始化演示数据失败: {str(e)}")
+            raise BadRequest(f"初始化演示数据失败: {str(e)}")
 
 
 # 注册API路由
@@ -390,6 +396,4 @@ zero_trust_api.add_resource(ZeroTrustLoginResource, '/auth/login')
 zero_trust_api.add_resource(ZeroTrustTokenInfoResource, '/auth/getUserTokenInfo')
 zero_trust_api.add_resource(ZeroTrustTokenVerifyResource, '/auth/verify')
 zero_trust_api.add_resource(ZeroTrustLogoutResource, '/auth/logout')
-zero_trust_api.add_resource(ZeroTrustUserProfileResource, '/user/profile')
-zero_trust_api.add_resource(ZeroTrustUserListResource, '/user/list')
 zero_trust_api.add_resource(ZeroTrustInitDemoResource, '/init/demo') 

@@ -18,9 +18,15 @@ interface ZeroTrustUser {
   created_at: string
 }
 
+interface DifyTokenPair {
+  access_token: string
+  refresh_token: string
+}
+
 interface UserTokenInfoResponse {
   success: boolean
   user: ZeroTrustUser
+  dify_token: DifyTokenPair
 }
 
 const ZeroTrustCallback = () => {
@@ -44,47 +50,40 @@ const ZeroTrustCallback = () => {
       try {
         setMessage('正在验证零信任Token...')
 
-        // 步骤1：调用getUserTokenInfo获取用户信息（模拟时序图中的API调用）
+        // 步骤1：调用getUserTokenInfo获取用户信息和dify token
         const userInfoData = await getUserTokenInfo(token)
         
-        if (!userInfoData.success) {
-          throw new Error('获取用户信息失败')
+        if (!userInfoData.success || !userInfoData.dify_token) {
+          throw new Error('获取用户信息或dify token失败')
         }
 
         const zeroTrustUser = userInfoData.user
-        setMessage(`欢迎，${zeroTrustUser.name}！正在创建Dify会话...`)
+        const difyToken = userInfoData.dify_token
+        
+        setMessage(`欢迎，${zeroTrustUser.name}！正在设置Dify会话...`)
 
-        // 步骤2：将零信任用户信息转换为Dify用户（模拟集成过程）
-        // 在实际应用中，这里应该调用Dify的用户创建/登录API
-        // 现在我们模拟这个过程，直接使用零信任用户信息
-
-        // 存储用户信息到localStorage（模拟Dify会话）
-        const difyUserSession = {
-          id: zeroTrustUser.id,
-          name: zeroTrustUser.name,
-          email: zeroTrustUser.email,
-          auth_type: 'zero_trust',
-          zero_trust_user: zeroTrustUser,
-          access_token: token, // 在实际应用中这应该是Dify的access_token
-          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24小时后过期
-        }
-
-        // 存储到localStorage（模拟Dify的session管理）
-        localStorage.setItem('dify_user_session', JSON.stringify(difyUserSession))
+        // 步骤2：设置dify登录状态 - 参考dify标准登录逻辑
+        // 保存dify access token和refresh token到localStorage
+        localStorage.setItem('console_token', difyToken.access_token)
+        localStorage.setItem('refresh_token', difyToken.refresh_token)
+        
+        // 保存零信任用户信息（用于审计和显示）
         localStorage.setItem('zero_trust_token', token)
-        localStorage.setItem('console_token', token) // 临时使用零信任token作为console token
+        localStorage.setItem('zero_trust_user', JSON.stringify(zeroTrustUser))
 
         setStatus('success')
-        setMessage(`身份验证成功！将在10秒后跳转到Dify工作区...`)
+        setMessage(`身份验证成功！正在跳转到Dify工作区...`)
 
-        // 延迟跳转，让用户看到成功消息和流程
+        // 显示成功消息
+        Toast.notify({
+          type: 'success',
+          message: `欢迎使用Dify，${zeroTrustUser.name}！`,
+        })
+
+        // 延迟跳转到dify工作区
         setTimeout(() => {
-          Toast.notify({
-            type: 'success',
-            message: `欢迎使用Dify，${zeroTrustUser.name}！`,
-          })
           router.push(redirectUrl)
-        }, 10000)
+        }, 2000)
 
       } catch (error) {
         console.error('Zero trust auth error:', error)
@@ -170,7 +169,8 @@ const ZeroTrustCallback = () => {
                 <div className={status === 'processing' ? 'animate-pulse' : ''}>
                   → 验证身份凭据
                 </div>
-                <div>→ 创建Dify会话</div>
+                <div>→ 获取Dify访问令牌</div>
+                <div>→ 设置登录会话</div>
                 <div>→ 跳转到工作区</div>
               </div>
             </div>
@@ -178,11 +178,12 @@ const ZeroTrustCallback = () => {
 
           {status === 'success' && (
             <div className="text-sm text-green-600">
-              <div className="mb-2">✓ 身份验证成功</div>
-              <div className="mb-2">✓ 用户会话已创建</div>
-              <div className="text-blue-600">将在10秒后自动跳转到Dify工作区...</div>
+              <div className="mb-2">✓ 零信任身份验证成功</div>
+              <div className="mb-2">✓ 获取Dify访问令牌成功</div>
+              <div className="mb-2">✓ 登录会话已创建</div>
+              <div className="text-blue-600">正在跳转到Dify工作区...</div>
               <div className="mt-3 text-xs text-gray-500">
-                您可以查看完整的零信任认证流程
+                您已成功通过零信任系统登录Dify
               </div>
             </div>
           )}
